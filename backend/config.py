@@ -27,6 +27,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "settings": {
         "allow_shell": True,
         "allow_sudo": False,          # opt-in; relies on NOPASSWD sudoers
+        "remote_token": "",           # if set, POST /api/exec with header X-RF-Token runs commands
         "workspace_dir": str(DATA_DIR / "workspaces"),
         "max_agent_steps": 40,
         "scope": "Syfe (*.syfe.com), Crypto.com",

@@ -2,13 +2,15 @@
 exposes the file tree + static structure, and drives the agentic chat + emulator."""
 from __future__ import annotations
 import asyncio
+import hmac
 import json
+import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fastapi import Body, FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Header, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
@@ -263,12 +265,22 @@ async def intercept_push(flow: dict = Body(...)):
 async def intercept_start(body: dict = Body(default={})):
     if MITM["proc"] and MITM["proc"].returncode is None:
         return {"running": True}
+    if not shutil.which("mitmdump"):
+        return {"running": False, "error": "mitmdump not installed — run 🛠 Auto-setup or: sudo apt install -y mitmproxy"}
     port = int(body.get("port", 8080))
     addon = str(Path(__file__).resolve().parent / "mitm_addon.py")
+    logf = str(cfgmod.DATA_DIR / "mitm.log")
     MITM["proc"] = await asyncio.create_subprocess_shell(
-        f'mitmdump -q -p {port} -s "{addon}"',
-        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        f'mitmdump -p {port} -s "{addon}" > "{logf}" 2>&1',
     )
+    await asyncio.sleep(1.2)  # let it bind (or fail)
+    if MITM["proc"].returncode is not None:
+        tail = ""
+        try:
+            tail = Path(logf).read_text("utf-8", "replace")[-400:]
+        except Exception:
+            pass
+        return {"running": False, "error": f"mitmdump exited (code {MITM['proc'].returncode}). Port {port} in use? {tail}"}
     if body.get("set_device_proxy", True):
         # 10.0.2.2 is the host loopback as seen from inside an AVD
         await emulator.set_proxy(f"10.0.2.2:{port}")
@@ -332,6 +344,45 @@ async def ws_setup(ws: WebSocket):
             pass
 
 
+# ── remote command exec (token-gated) + environment self-test ───────────────────
+@app.post("/api/exec")
+async def remote_exec(body: dict = Body(...), x_rf_token: str = Header(default="")):
+    tok = cfgmod.load()["settings"].get("remote_token", "")
+    if not tok:
+        return JSONResponse({"error": "remote exec disabled — set a remote_token in Settings"}, 403)
+    if not hmac.compare_digest(str(x_rf_token), str(tok)):
+        return JSONResponse({"error": "bad token"}, 403)
+    command = body.get("command", "")
+    if body.get("sudo"):
+        command = "sudo -n " + command
+    timeout = int(body.get("timeout", 120))
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        return {"rc": proc.returncode, "out": out.decode("utf-8", "replace")[:200000]}
+    except asyncio.TimeoutError:
+        return {"rc": 124, "out": f"[timeout after {timeout}s]"}
+    except Exception as e:  # noqa: BLE001
+        return {"rc": -1, "out": f"[error] {e}"}
+
+
+@app.get("/api/selftest")
+async def selftest():
+    emu = bool(shutil.which("emulator")) or (Path(emulator.android_home()) / "emulator" / "emulator").exists()
+    return {
+        "mitmdump": bool(shutil.which("mitmdump")),
+        "adb": bool(shutil.which("adb")),
+        "emulator": emu,
+        "jadx": bool(decompiler.find_jadx()),
+        "ripgrep": bool(shutil.which("rg")),
+        "kvm": Path("/dev/kvm").exists(),
+        "intercept_running": bool(MITM.get("proc") and MITM["proc"].returncode is None),
+        "avds": await emulator.list_avds(),
+    }
+
+
 # ── self-update from GitHub (git pull) ──────────────────────────────────────────
 @app.post("/api/self-update")
 async def self_update():
@@ -349,9 +400,10 @@ async def self_update():
 if __name__ == "__main__":
     import os
     import uvicorn
+    host = os.environ.get("RECONFORGE_HOST", "127.0.0.1")
     reload = os.environ.get("RECONFORGE_RELOAD") == "1"
-    print("ReconForge -> http://127.0.0.1:8777" + (" [hot-reload]" if reload else ""))
+    print(f"ReconForge -> http://{host}:8777" + (" [hot-reload]" if reload else ""))
     if reload:
-        uvicorn.run("main:app", host="127.0.0.1", port=8777, reload=True)
+        uvicorn.run("main:app", host=host, port=8777, reload=True)
     else:
-        uvicorn.run(app, host="127.0.0.1", port=8777)
+        uvicorn.run(app, host=host, port=8777)

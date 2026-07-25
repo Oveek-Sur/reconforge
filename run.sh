@@ -23,7 +23,7 @@ echo "────────────────────────�
 echo " ReconForge → http://127.0.0.1:8777"
 echo "─────────────────────────────────────────────"
 if [ "${RECONFORGE_RELOAD:-0}" = "1" ]; then
-  cd backend && exec uvicorn main:app --host 127.0.0.1 --port 8777 --reload
+  cd backend && exec uvicorn main:app --host "${RECONFORGE_HOST:-127.0.0.1}" --port 8777 --reload
 else
   exec python backend/main.py
 fi

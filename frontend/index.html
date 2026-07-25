@@ -165,11 +165,15 @@
     <div class="row" style="align-items:flex-start"><label>Authorized scope</label><textarea id="scope" style="flex:1;height:58px" placeholder="e.g. Syfe (*.syfe.com), Crypto.com, MyProgram (*.example.com)"></textarea></div>
     <div class="muted" style="font-size:11px;margin:-2px 0 8px 130px">Inside this scope the agent won't refuse. Edit anytime as you switch programs.</div>
     <div class="row"><label>Allow sudo</label><input type="checkbox" id="allowsudo" style="flex:0"/><span class="muted">agent may run sudo (needs NOPASSWD)</span></div>
+    <div class="row"><label>Remote token</label><input id="rtoken" placeholder="set to enable remote /api/exec (leave empty = disabled)"/></div>
+    <div class="muted" style="font-size:11px;margin:-2px 0 8px 130px">With this token + your Kali IP (run with RECONFORGE_HOST=0.0.0.0), commands can be sent to the VM for debugging.</div>
     <div class="row">
       <button onclick="saveSettings()" class="primary">Save</button>
       <button onclick="testAgentic()">🧪 Test agentic</button>
+      <button onclick="selfTest()">🩺 Self-test</button>
       <span id="testres"></span>
     </div>
+    <div id="selftestres" class="muted" style="font-size:11px;margin-top:4px"></div>
     <div class="row"><button onclick="closeModal('settings')">Close</button></div>
   </div>
 </div>
@@ -211,8 +215,9 @@ let CFG=null, chatWS=null, curFile=null;
 
 // ── config ──────────────────────────────────────────────
 async function loadCfg(){ CFG = await (await fetch('/api/config')).json(); $('#provlabel').textContent = CFG.active_provider; $('#allowsudo').checked = CFG.settings.allow_sudo; }
-function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#scope').value = (CFG.settings&&CFG.settings.scope)||''; $('#allowsudo').checked = !!(CFG.settings&&CFG.settings.allow_sudo); $('#settings').classList.add('show'); }
+function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#scope').value = (CFG.settings&&CFG.settings.scope)||''; $('#rtoken').value = (CFG.settings&&CFG.settings.remote_token)||''; $('#allowsudo').checked = !!(CFG.settings&&CFG.settings.allow_sudo); $('#settings').classList.add('show'); }
 function closeModal(id){ $('#'+id).classList.remove('show'); }
+async function selfTest(){ $('#selftestres').textContent='checking…'; try{ const r=await (await fetch('/api/selftest')).json(); const ic=k=>r[k]?'✅':'❌'; $('#selftestres').innerHTML=`mitmdump ${ic('mitmdump')} · adb ${ic('adb')} · emulator ${ic('emulator')} · jadx ${ic('jadx')} · rg ${ic('ripgrep')} · kvm ${ic('kvm')} · intercept ${r.intercept_running?'running':'off'} · avds: ${esc((r.avds||[]).join(',')||'none')}`; }catch(e){ $('#selftestres').textContent='selftest failed: '+e; } }
 async function selfUpdate(){ addUser('⟳ Update from GitHub'); try{ const r=await (await fetch('/api/self-update',{method:'POST'})).json(); addAI('git pull:\n'+(r.out||'(no output)')+'\n\nBackend hot-reloads if started with RECONFORGE_RELOAD=1; refresh the page for UI changes.'); }catch(e){ addAI('update failed: '+e); } }
 function autoSetup(){
   $('#setup').classList.add('show');
@@ -238,7 +243,7 @@ function renderProv(){
     `<div class="row"><label>${lbl}</label><input id="f_${k}" type="${t||'text'}" value="${esc(pc[k]||'')}" placeholder="${k}"/></div>`).join('');
 }
 async function saveSettings(){
-  const p=$('#prov').value; const patch={active_provider:p, providers:{[p]:{}}, settings:{allow_sudo:$('#allowsudo').checked, scope:$('#scope').value}};
+  const p=$('#prov').value; const patch={active_provider:p, providers:{[p]:{}}, settings:{allow_sudo:$('#allowsudo').checked, scope:$('#scope').value, remote_token:$('#rtoken').value}};
   FIELDS[p].forEach(([k])=>{ const v=$('#f_'+k).value; if(v && !v.includes('…')) patch.providers[p][k]=v; });
   CFG = await (await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)})).json();
   $('#provlabel').textContent = CFG.active_provider; $('#testres').innerHTML='<span class="muted">saved</span>';
@@ -382,7 +387,7 @@ function emuKey(k){ emuInput({kind:'key',key:k}); }
 function emuDeeplink(){ const u=$('#dlink').value.trim(); if(u){ emuInput({kind:'deeplink',uri:u}); addAI('sent deeplink: '+u); } }
 let icWS=null, icOn=false;
 function connectIntercept(){ icWS=new WebSocket(`ws://${location.host}/ws/intercept`); icWS.onmessage=ev=>{ const f=JSON.parse(ev.data); if(f.type==='flow') addFlow(f); }; icWS.onclose=()=>setTimeout(connectIntercept,1500); }
-async function icToggle(){ if(!icOn){ const tgt=$('#ictarget').value; await fetch('/api/intercept/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_device_proxy: tgt==='emulator'})}); icOn=true; $('#icbtn').textContent='⏸ Stop intercept'; $('#livenet').style.display='block'; addAI(tgt==='emulator'?'🌐 intercept on — emulator proxied (10.0.2.2:8080)':'🌐 intercept on — set Firefox proxy 127.0.0.1:8080 + trust mitmproxy CA (WEB_INTERCEPT.md)'); } else { await fetch('/api/intercept/stop',{method:'POST'}); icOn=false; $('#icbtn').textContent='▶ Start intercept'; $('#livenet').style.display='none'; } }
+async function icToggle(){ if(!icOn){ const tgt=$('#ictarget').value; const r=await (await fetch('/api/intercept/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_device_proxy: tgt==='emulator'})})).json(); if(r.error){ addAI('⚠️ intercept failed: '+r.error); return; } icOn=true; $('#icbtn').textContent='⏸ Stop intercept'; $('#livenet').style.display='block'; addAI(tgt==='emulator'?'🌐 intercept on — emulator proxied (10.0.2.2:8080)':'🌐 intercept on — set Firefox proxy 127.0.0.1:8080 + trust mitmproxy CA (WEB_INTERCEPT.md)'); } else { await fetch('/api/intercept/stop',{method:'POST'}); icOn=false; $('#icbtn').textContent='▶ Start intercept'; $('#livenet').style.display='none'; } }
 let FLOWS=[], aiInflight=0;
 function suspicious(f){
   const hj=JSON.stringify(f.req_headers||{}).toLowerCase(), rj=JSON.stringify(f.res_headers||{}).toLowerCase();
