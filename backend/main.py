@@ -263,17 +263,28 @@ async def intercept_push(flow: dict = Body(...)):
 
 @app.post("/api/intercept/start")
 async def intercept_start(body: dict = Body(default={})):
-    if MITM["proc"] and MITM["proc"].returncode is None:
-        return {"running": True}
     if not shutil.which("mitmdump"):
         return {"running": False, "error": "mitmdump not installed — run 🛠 Auto-setup or: sudo apt install -y mitmproxy"}
     port = int(body.get("port", 8080))
+    # Clean our previous proc + any stale mitmdump holding the port. This fixes the
+    # silent 'running but never bound' when an old instance from an earlier Start lingers.
+    if MITM.get("proc") and MITM["proc"].returncode is None:
+        try:
+            MITM["proc"].terminate()
+        except Exception:
+            pass
+    try:
+        killer = await asyncio.create_subprocess_shell("pkill -x mitmdump 2>/dev/null")
+        await killer.wait()
+    except Exception:
+        pass
+    await asyncio.sleep(0.6)
     addon = str(Path(__file__).resolve().parent / "mitm_addon.py")
     logf = str(cfgmod.DATA_DIR / "mitm.log")
     MITM["proc"] = await asyncio.create_subprocess_shell(
         f'mitmdump -p {port} -s "{addon}" > "{logf}" 2>&1',
     )
-    await asyncio.sleep(1.2)  # let it bind (or fail)
+    await asyncio.sleep(1.8)  # let it bind (or fail)
     if MITM["proc"].returncode is not None:
         tail = ""
         try:
