@@ -157,6 +157,8 @@
     </div>
     <div id="provfields"></div>
     <hr style="border-color:var(--bd)"/>
+    <div class="row" style="align-items:flex-start"><label>Authorized scope</label><textarea id="scope" style="flex:1;height:58px" placeholder="e.g. Syfe (*.syfe.com), Crypto.com, MyProgram (*.example.com)"></textarea></div>
+    <div class="muted" style="font-size:11px;margin:-2px 0 8px 130px">Inside this scope the agent won't refuse. Edit anytime as you switch programs.</div>
     <div class="row"><label>Allow sudo</label><input type="checkbox" id="allowsudo" style="flex:0"/><span class="muted">agent may run sudo (needs NOPASSWD)</span></div>
     <div class="row">
       <button onclick="saveSettings()" class="primary">Save</button>
@@ -194,7 +196,7 @@ let CFG=null, chatWS=null, curFile=null;
 
 // ── config ──────────────────────────────────────────────
 async function loadCfg(){ CFG = await (await fetch('/api/config')).json(); $('#provlabel').textContent = CFG.active_provider; $('#allowsudo').checked = CFG.settings.allow_sudo; }
-function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#settings').classList.add('show'); }
+function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#scope').value = (CFG.settings&&CFG.settings.scope)||''; $('#allowsudo').checked = !!(CFG.settings&&CFG.settings.allow_sudo); $('#settings').classList.add('show'); }
 function closeModal(id){ $('#'+id).classList.remove('show'); }
 async function selfUpdate(){ addUser('⟳ Update from GitHub'); try{ const r=await (await fetch('/api/self-update',{method:'POST'})).json(); addAI('git pull:\n'+(r.out||'(no output)')+'\n\nBackend hot-reloads if started with RECONFORGE_RELOAD=1; refresh the page for UI changes.'); }catch(e){ addAI('update failed: '+e); } }
 function autoSetup(){ if(!chatWS||chatWS.readyState!==1){ addAI('⚠️ chat not connected'); return; }
@@ -213,7 +215,7 @@ function renderProv(){
     `<div class="row"><label>${lbl}</label><input id="f_${k}" type="${t||'text'}" value="${esc(pc[k]||'')}" placeholder="${k}"/></div>`).join('');
 }
 async function saveSettings(){
-  const p=$('#prov').value; const patch={active_provider:p, providers:{[p]:{}}, settings:{allow_sudo:$('#allowsudo').checked}};
+  const p=$('#prov').value; const patch={active_provider:p, providers:{[p]:{}}, settings:{allow_sudo:$('#allowsudo').checked, scope:$('#scope').value}};
   FIELDS[p].forEach(([k])=>{ const v=$('#f_'+k).value; if(v && !v.includes('…')) patch.providers[p][k]=v; });
   CFG = await (await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)})).json();
   $('#provlabel').textContent = CFG.active_provider; $('#testres').innerHTML='<span class="muted">saved</span>';
