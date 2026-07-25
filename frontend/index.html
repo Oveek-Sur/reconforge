@@ -194,6 +194,16 @@
   </div>
 </div>
 
+<!-- Setup console modal -->
+<div class="modal" id="setup">
+  <div class="card" style="width:840px">
+    <h2>🛠 Environment setup <span id="setupstatus" style="font-size:12px"></span></h2>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">Installs Android SDK + emulator + API-34 image + AVD + mitmproxy. First run downloads a few GB — watch it live below.</div>
+    <pre id="setuplog" style="background:#0b0d11;padding:10px;border-radius:8px;height:56vh;overflow:auto;white-space:pre-wrap;font-size:12px"></pre>
+    <div class="row"><button onclick="closeModal('setup')">Close</button><span class="muted">You can close this — setup keeps running on the server.</span></div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -204,9 +214,17 @@ async function loadCfg(){ CFG = await (await fetch('/api/config')).json(); $('#p
 function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#scope').value = (CFG.settings&&CFG.settings.scope)||''; $('#allowsudo').checked = !!(CFG.settings&&CFG.settings.allow_sudo); $('#settings').classList.add('show'); }
 function closeModal(id){ $('#'+id).classList.remove('show'); }
 async function selfUpdate(){ addUser('⟳ Update from GitHub'); try{ const r=await (await fetch('/api/self-update',{method:'POST'})).json(); addAI('git pull:\n'+(r.out||'(no output)')+'\n\nBackend hot-reloads if started with RECONFORGE_RELOAD=1; refresh the page for UI changes.'); }catch(e){ addAI('update failed: '+e); } }
-function autoSetup(){ if(!chatWS||chatWS.readyState!==1){ addAI('⚠️ chat not connected'); return; }
-  const m='Set up the full Android testing environment on this Kali box: call setup_environment to install the SDK, emulator, a google_apis x86_64 API-34 system image, create the AVD, and mitmproxy. Read the SUMMARY; if anything is MISSING or a step failed, diagnose with shell tools and fix it (install missing deps, accept SDK licenses, fix PATH, check /dev/kvm), then run setup_environment again until adb + emulator + AVD + mitmproxy are all present. Then report the final status.';
-  addUser('🛠 Auto-setup environment'); chatWS.send(JSON.stringify({message:m})); }
+function autoSetup(){
+  $('#setup').classList.add('show');
+  const log=$('#setuplog'); log.textContent=''; const st=$('#setupstatus');
+  st.textContent='● running…'; st.style.color='var(--warn)';
+  const ws=new WebSocket(`ws://${location.host}/ws/setup`);
+  ws.onmessage=ev=>{ const m=JSON.parse(ev.data);
+    if(m.type==='line'){ log.textContent+=m.line+'\n'; log.scrollTop=log.scrollHeight; }
+    else if(m.type==='done'){ st.textContent=m.rc===0?'✓ finished':('finished (exit '+m.rc+')'); st.style.color=m.rc===0?'var(--ok)':'var(--err)'; log.textContent+='\n=== done ===\n'; log.scrollTop=log.scrollHeight; }
+  };
+  ws.onerror=()=>{ log.textContent+='\n[error] could not reach setup socket — is the server running?\n'; st.textContent='error'; st.style.color='var(--err)'; };
+}
 const FIELDS = {
   azure_openai:[['endpoint','Endpoint'],['api_key','API key','password'],['deployment','Deployment'],['api_version','API version']],
   anthropic:[['api_key','API key','password'],['model','Model']],
@@ -330,8 +348,8 @@ function connectChat(){
 function newChat(){ if(chatWS && chatWS.readyState===1) chatWS.send(JSON.stringify({reset:true})); fetch('/api/history/clear',{method:'POST'}); $('#msgs').innerHTML=''; }
 function addUser(t){ const d=document.createElement('div'); d.className='msg user'; d.innerHTML=`<div class="bubble">${esc(t)}</div>`; $('#msgs').appendChild(d); scroll(); }
 function addAI(t){ const d=document.createElement('div'); d.className='msg ai'; d.innerHTML=`<div class="bubble">${esc(t)}</div>`; $('#msgs').appendChild(d); scroll(); }
-function addTool(name,args){ const d=document.createElement('details'); d.className='tool'; d.id='tool-'+Math.random().toString(36).slice(2); d.innerHTML=`<summary>🔧 <b>${esc(name)}</b> ${esc(JSON.stringify(args).slice(0,120))}</summary>`; $('#msgs').appendChild(d); scroll(); window.__lastTool=d; }
-function addToolResult(name,result){ const d=window.__lastTool; if(d){ const pre=document.createElement('pre'); pre.textContent=result; d.appendChild(pre);} scroll(); }
+function addTool(name,args){ const d=document.createElement('details'); d.className='tool'; d.open=true; d.innerHTML=`<summary>🔧 <b>${esc(name)}</b> <span class="muted">${esc(JSON.stringify(args).slice(0,100))}</span> <span class="st" style="color:var(--warn)">⏳ running…</span></summary>`; $('#msgs').appendChild(d); scroll(); window.__lastTool=d; }
+function addToolResult(name,result){ const d=window.__lastTool; if(d){ const st=d.querySelector('.st'); if(st){ st.textContent='✓ done'; st.style.color='var(--ok)'; } const pre=document.createElement('pre'); pre.textContent=result; d.appendChild(pre);} scroll(); }
 function scroll(){ $('#msgs').scrollTop = $('#msgs').scrollHeight; }
 function send(){
   const t = $('#input').value.trim(); if(!t) return;

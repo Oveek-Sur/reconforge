@@ -29,7 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "allow_sudo": False,          # opt-in; relies on NOPASSWD sudoers
         "workspace_dir": str(DATA_DIR / "workspaces"),
         "max_agent_steps": 40,
-        "scope": "Syfe (syfe.com, app.syfe.com, app-hk.syfe.com, app-au.syfe.com, *.syfe.com) and Crypto.com bug-bounty programs",
+        "scope": "Syfe (*.syfe.com), Crypto.com",
         "system_prompt": (
             "You are ReconForge, an autonomous security assistant operated by a PROFESSIONAL "
             "bug-bounty researcher on their OWN Kali Linux VM. The operator runs authorized "

@@ -308,6 +308,30 @@ async def clear_history():
     return {"ok": True}
 
 
+# ── live setup console (streams bootstrap.sh line-by-line) ───────────────────────
+@app.websocket("/ws/setup")
+async def ws_setup(ws: WebSocket):
+    await ws.accept()
+    script = ROOT / "scripts" / "bootstrap.sh"
+    await ws.send_json({"type": "line", "line": f"$ bash {script}"})
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            f'bash "{script}"', stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        assert proc.stdout is not None
+        async for raw in proc.stdout:
+            await ws.send_json({"type": "line", "line": raw.decode("utf-8", "replace").rstrip()})
+        rc = await proc.wait()
+        await ws.send_json({"type": "done", "rc": rc})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:  # noqa: BLE001
+        try:
+            await ws.send_json({"type": "line", "line": f"[error] {e}"})
+        except Exception:
+            pass
+
+
 # ── self-update from GitHub (git pull) ──────────────────────────────────────────
 @app.post("/api/self-update")
 async def self_update():
