@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReconForge</title>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--bd:#2a2f3a;--fg:#e6e9ef;--mut:#8b93a7;--acc:#5b8cff;--ok:#3fb950;--warn:#d29922;--err:#f85149;}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--bd)}
+  header .logo{font-weight:700;color:var(--acc)}
+  header .spacer{flex:1}
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  select,input,textarea{background:var(--panel2);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:inherit}
+  #progress{height:3px;background:transparent}
+  #progress .bar{height:100%;width:0;background:var(--acc);transition:width .2s}
+  main{display:grid;grid-template-columns:280px 1fr 400px;height:calc(100vh - 45px)}
+  .pane{overflow:auto;border-right:1px solid var(--bd)}
+  .pane:last-child{border-right:none}
+  .pane h3{margin:0;padding:8px 12px;font-size:12px;text-transform:uppercase;color:var(--mut);position:sticky;top:0;background:var(--panel)}
+  .tabs{display:flex;border-bottom:1px solid var(--bd)}
+  .tabs div{padding:8px 12px;cursor:pointer;color:var(--mut);font-size:13px}
+  .tabs div.active{color:var(--fg);border-bottom:2px solid var(--acc)}
+  .tree{padding:4px 0;font-size:13px}
+  .node{padding:2px 8px 2px 0;cursor:pointer;white-space:nowrap;user-select:none}
+  .node:hover{background:var(--panel2)}
+  .node .ico{opacity:.8;margin-right:4px}
+  #struct{padding:10px 12px;font-size:12.5px}
+  #struct .k{color:var(--acc)}
+  #struct .tag{display:inline-block;background:var(--panel2);border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin:2px 3px 0 0;font-size:11px}
+  #struct .sec{color:var(--warn)}
+  /* chat */
+  #chat{display:flex;flex-direction:column;height:100%}
+  #msgs{flex:1;overflow:auto;padding:12px}
+  .msg{margin:0 0 12px;max-width:92%}
+  .msg.user{margin-left:auto}
+  .bubble{padding:9px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word}
+  .msg.user .bubble{background:var(--acc);color:#fff;border-bottom-right-radius:3px}
+  .msg.ai .bubble{background:var(--panel2);border:1px solid var(--bd)}
+  .tool{background:var(--panel);border:1px solid var(--bd);border-radius:10px;margin:6px 0;font-size:12.5px;overflow:hidden}
+  .tool summary{cursor:pointer;padding:6px 10px;color:var(--mut)}
+  .tool summary b{color:var(--fg)}
+  .tool pre{margin:0;padding:8px 10px;background:#0b0d11;overflow:auto;max-height:280px;white-space:pre-wrap;border-top:1px solid var(--bd)}
+  #composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--bd)}
+  #composer textarea{flex:1;resize:none;height:44px;max-height:160px}
+  /* emulator */
+  #emu{display:flex;flex-direction:column;height:100%}
+  #emu .screen{flex:1;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
+  #emu img{max-width:100%;max-height:100%}
+  #emu .ph{color:var(--mut);text-align:center;padding:20px}
+  #emu .bar{display:flex;gap:6px;padding:8px;border-top:1px solid var(--bd)}
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10}
+  .modal.show{display:flex}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:14px;width:560px;max-width:92vw;max-height:86vh;overflow:auto;padding:18px}
+  .card h2{margin:0 0 12px;font-size:16px}
+  .row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  .row label{width:130px;color:var(--mut);font-size:12.5px}
+  .row input,.row select{flex:1}
+  .muted{color:var(--mut);font-size:12px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--bd)}
+  .pill.ok{color:var(--ok);border-color:var(--ok)}
+  .pill.err{color:var(--err);border-color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🔨 ReconForge</span>
+  <button onclick="openApk()">📦 Open APK</button>
+  <button onclick="autoSetup()">🛠 Auto-setup</button>
+  <button onclick="selfUpdate()" title="git pull latest from GitHub">⟳ Update</button>
+  <span id="apkname" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="provlabel" class="muted"></span>
+  <button onclick="openSettings()">⚙️ Settings</button>
+</header>
+<div id="progress"><div class="bar" id="pbar"></div></div>
+
+<main>
+  <!-- LEFT: files + structure -->
+  <div class="pane">
+    <div class="tabs">
+      <div class="active" data-tab="files" onclick="tab('files')">Files</div>
+      <div data-tab="struct" onclick="tab('struct')">Structure</div>
+    </div>
+    <div id="files"><div class="tree" id="tree"><div class="muted" style="padding:12px">Open an APK to decompile.</div></div></div>
+    <div id="structwrap" style="display:none"><div id="struct" class="muted" style="padding:12px">No analysis yet.</div></div>
+  </div>
+
+  <!-- CENTER: chat -->
+  <div class="pane" style="overflow:hidden">
+    <div id="chat">
+      <div id="msgs"></div>
+      <div id="composer">
+        <textarea id="input" placeholder="Ask ReconForge to hunt… (Shift+Enter = newline)"></textarea>
+        <button class="primary" onclick="send()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: emulator + network -->
+  <div class="pane">
+    <div class="tabs">
+      <div class="active" data-rt="screen" onclick="rtab('screen')">📱 Screen</div>
+      <div data-rt="net" onclick="rtab('net')">🌐 Network</div>
+    </div>
+    <div id="rt-screen">
+      <div style="display:flex;gap:6px;padding:6px;flex-wrap:wrap;align-items:center">
+        <select id="avdsel" style="flex:1"></select>
+        <button onclick="emuAvds()" title="refresh AVDs">⟳</button>
+        <label class="muted" style="font-size:11px"><input type="checkbox" id="emuheadless"/>headless</label>
+        <button onclick="emuStart()">▶ Start</button>
+        <button onclick="emuStop()">⏹</button>
+      </div>
+      <div style="display:flex;gap:6px;padding:0 6px 6px">
+        <button onclick="emuInstall()">Install APK</button>
+        <button onclick="emuLaunch()">Launch</button>
+        <button onclick="emuToggle()" id="emubtn">▶ Mirror</button>
+      </div>
+      <div class="screen" style="height:58vh"><div class="ph" id="emuph">No device.<br>Start an AVD → ▶ Mirror.<br><span class="muted">tap/swipe works on the image</span></div><img id="emuimg" style="display:none"/></div>
+      <div style="display:flex;gap:6px;padding:6px;flex-wrap:wrap">
+        <button onclick="emuKey(4)">◀</button><button onclick="emuKey(3)">⬤</button><button onclick="emuKey(187)">▢</button>
+        <input id="dlink" placeholder="deeplink e.g. pendo-70a18c0a://pairing" style="flex:1"/><button onclick="emuDeeplink()">Open</button>
+      </div>
+    </div>
+    <div id="rt-net" style="display:none">
+      <div style="padding:8px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <label class="muted" style="font-size:11px">Target</label>
+          <select id="ictarget"><option value="firefox">Firefox / Web</option><option value="emulator">Emulator</option></select>
+          <button onclick="icToggle()" id="icbtn">▶ Start intercept</button>
+          <button onclick="analyzeFlows()">🔎 Analyze all</button>
+          <button onclick="clearFlows()">🗑</button>
+        </div>
+        <div class="muted" style="margin-top:4px">Firefox → proxy 127.0.0.1:8080 + trust CA (WEB_INTERCEPT.md). Emulator → auto 10.0.2.2:8080.</div>
+      </div>
+      <div id="flows" style="overflow:auto"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Settings modal -->
+<div class="modal" id="settings">
+  <div class="card">
+    <h2>Settings — LLM Provider</h2>
+    <div class="row"><label>Provider</label>
+      <select id="prov" onchange="renderProv()">
+        <option value="azure_openai">Azure OpenAI (GPT)</option>
+        <option value="anthropic">Anthropic (Claude)</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="openai">OpenAI</option>
+        <option value="gemini">Google Gemini</option>
+      </select>
+    </div>
+    <div id="provfields"></div>
+    <hr style="border-color:var(--bd)"/>
+    <div class="row"><label>Allow sudo</label><input type="checkbox" id="allowsudo" style="flex:0"/><span class="muted">agent may run sudo (needs NOPASSWD)</span></div>
+    <div class="row">
+      <button onclick="saveSettings()" class="primary">Save</button>
+      <button onclick="testAgentic()">🧪 Test agentic</button>
+      <span id="testres"></span>
+    </div>
+    <div class="row"><button onclick="closeModal('settings')">Close</button></div>
+  </div>
+</div>
+
+<!-- APK picker modal -->
+<div class="modal" id="apk">
+  <div class="card">
+    <h2>Open APK</h2>
+    <div class="row"><input id="apkpath" placeholder="/path/to/app.apk or a folder to browse"/><button onclick="browseTo(document.getElementById('apkpath').value)">Go</button></div>
+    <div class="muted" id="apkcwd"></div>
+    <div id="apklist" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
+    <div class="row"><button onclick="closeModal('apk')">Cancel</button></div>
+  </div>
+</div>
+
+<!-- File viewer modal -->
+<div class="modal" id="viewer">
+  <div class="card" style="width:900px">
+    <h2 id="vpath" style="font-size:13px;word-break:break-all"></h2>
+    <pre id="vbody" style="background:#0b0d11;padding:10px;border-radius:8px;max-height:70vh;overflow:auto;white-space:pre-wrap"></pre>
+    <div class="row"><button onclick="closeModal('viewer')">Close</button><button onclick="askAboutFile()">Ask agent about this file</button></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let CFG=null, chatWS=null, curFile=null;
+
+// ── config ──────────────────────────────────────────────
+async function loadCfg(){ CFG = await (await fetch('/api/config')).json(); $('#provlabel').textContent = CFG.active_provider; $('#allowsudo').checked = CFG.settings.allow_sudo; }
+function openSettings(){ $('#prov').value = CFG.active_provider; renderProv(); $('#settings').classList.add('show'); }
+function closeModal(id){ $('#'+id).classList.remove('show'); }
+async function selfUpdate(){ addUser('⟳ Update from GitHub'); try{ const r=await (await fetch('/api/self-update',{method:'POST'})).json(); addAI('git pull:\n'+(r.out||'(no output)')+'\n\nBackend hot-reloads if started with RECONFORGE_RELOAD=1; refresh the page for UI changes.'); }catch(e){ addAI('update failed: '+e); } }
+function autoSetup(){ if(!chatWS||chatWS.readyState!==1){ addAI('⚠️ chat not connected'); return; }
+  const m='Set up the full Android testing environment on this Kali box: call setup_environment to install the SDK, emulator, a google_apis x86_64 API-34 system image, create the AVD, and mitmproxy. Read the SUMMARY; if anything is MISSING or a step failed, diagnose with shell tools and fix it (install missing deps, accept SDK licenses, fix PATH, check /dev/kvm), then run setup_environment again until adb + emulator + AVD + mitmproxy are all present. Then report the final status.';
+  addUser('🛠 Auto-setup environment'); chatWS.send(JSON.stringify({message:m})); }
+const FIELDS = {
+  azure_openai:[['endpoint','Endpoint'],['api_key','API key','password'],['deployment','Deployment'],['api_version','API version']],
+  anthropic:[['api_key','API key','password'],['model','Model']],
+  openrouter:[['api_key','API key','password'],['model','Model']],
+  openai:[['api_key','API key','password'],['model','Model'],['base_url','Base URL']],
+  gemini:[['api_key','API key','password'],['model','Model']],
+};
+function renderProv(){
+  const p=$('#prov').value, pc=CFG.providers[p]||{};
+  $('#provfields').innerHTML = FIELDS[p].map(([k,lbl,t])=>
+    `<div class="row"><label>${lbl}</label><input id="f_${k}" type="${t||'text'}" value="${esc(pc[k]||'')}" placeholder="${k}"/></div>`).join('');
+}
+async function saveSettings(){
+  const p=$('#prov').value; const patch={active_provider:p, providers:{[p]:{}}, settings:{allow_sudo:$('#allowsudo').checked}};
+  FIELDS[p].forEach(([k])=>{ const v=$('#f_'+k).value; if(v && !v.includes('…')) patch.providers[p][k]=v; });
+  CFG = await (await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)})).json();
+  $('#provlabel').textContent = CFG.active_provider; $('#testres').innerHTML='<span class="muted">saved</span>';
+}
+async function testAgentic(){
+  $('#testres').innerHTML='<span class="muted">testing…</span>';
+  const r = await (await fetch('/api/test-agentic',{method:'POST'})).json();
+  $('#testres').innerHTML = r.agentic ? '<span class="pill ok">agentic ✓</span>' : '<span class="pill err">failed</span> <span class="muted">'+esc(r.error||JSON.stringify(r.tool_calls||[]))+'</span>';
+}
+
+// ── APK picker + analyze ────────────────────────────────
+function openApk(){ $('#apk').classList.add('show'); browseTo(''); }
+async function browseTo(path){
+  const r = await (await fetch('/api/browse?path='+encodeURIComponent(path||''))).json();
+  if(r.error){ $('#apklist').innerHTML='<div class="muted">'+esc(r.error)+'</div>'; return; }
+  $('#apkcwd').textContent = r.path; $('#apkpath').value = r.path;
+  let html = `<div class="node" onclick="browseTo('${esc(r.parent)}')"><span class="ico">⬆️</span>..</div>`;
+  for(const it of r.items){
+    if(it.dir) html+=`<div class="node" onclick="browseTo('${esc(it.path)}')"><span class="ico">📁</span>${esc(it.name)}</div>`;
+    else if(it.name.toLowerCase().endsWith('.apk')) html+=`<div class="node" onclick="startAnalyze('${esc(it.path)}')"><span class="ico">📦</span>${esc(it.name)}</div>`;
+  }
+  $('#apklist').innerHTML = html;
+}
+function setProgress(p){ $('#pbar').style.width = (p||0)+'%'; }
+function startAnalyze(apk){
+  closeModal('apk'); $('#apkname').textContent = apk.split(/[\\\/]/).pop(); setProgress(1);
+  $('#tree').innerHTML='<div class="muted" style="padding:12px">Decompiling…</div>';
+  const ws = new WebSocket(`ws://${location.host}/ws/analyze`);
+  ws.onopen = ()=> ws.send(JSON.stringify({apk_path:apk}));
+  ws.onmessage = ev=>{
+    const m = JSON.parse(ev.data);
+    if(m.type==='progress'){ setProgress(m.pct); $('#apkname').textContent = apk.split(/[\\\/]/).pop()+' — '+m.pct+'% '+(m.msg||''); }
+    else if(m.type==='stage'){ $('#apkname').textContent = apk.split(/[\\\/]/).pop()+' — '+m.stage; }
+    else if(m.type==='done'){ setProgress(100); $('#apkname').textContent = apk.split(/[\\\/]/).pop(); loadTree(m.sources); renderStruct(m.structure); addAI('✅ Decompiled. `'+m.structure.package+'` v'+(m.structure.version||'?')+' — '+(m.structure.exported_components.length)+' exported components, '+(m.structure.deeplinks.length)+' deep-links, '+(m.structure.secrets.filter(s=>s.likely_secret).length)+' secret-like values. Ask me to start hunting.'); }
+    else if(m.type==='error'){ $('#tree').innerHTML='<div class="muted" style="padding:12px">'+esc(m.error)+'</div>'; }
+  };
+}
+
+// ── file tree ───────────────────────────────────────────
+async function loadTree(root){
+  $('#tree').innerHTML=''; const el = await mkNode({name:root.split(/[\\\/]/).pop()||root, path:root, dir:true}, 0, true);
+  $('#tree').appendChild(el);
+}
+async function mkNode(it, depth, open){
+  const wrap = document.createElement('div');
+  const row = document.createElement('div'); row.className='node'; row.style.paddingLeft=(6+depth*12)+'px';
+  row.innerHTML = `<span class="ico">${it.dir?'📁':'📄'}</span>${esc(it.name)}`;
+  wrap.appendChild(row);
+  if(it.dir){
+    const kids = document.createElement('div'); kids.style.display = open?'block':'none'; wrap.appendChild(kids);
+    let loaded=false;
+    row.onclick = async ()=>{
+      kids.style.display = kids.style.display==='none'?'block':'none';
+      if(!loaded){ loaded=true;
+        const r = await (await fetch('/api/tree?path='+encodeURIComponent(it.path))).json();
+        for(const c of (r.items||[])) kids.appendChild(await mkNode(c, depth+1, false));
+      }
+    };
+    if(open) row.onclick();
+  } else {
+    row.onclick = ()=> openFile(it.path);
+  }
+  return wrap;
+}
+async function openFile(path){
+  const r = await (await fetch('/api/file?path='+encodeURIComponent(path))).json();
+  curFile = path; $('#vpath').textContent = path; $('#vbody').textContent = r.content||r.error||''; $('#viewer').classList.add('show');
+}
+function askAboutFile(){ closeModal('viewer');
+  if(window.__flow){ $('#input').value='Analyze this intercepted API request for vulnerabilities (IDOR/auth/injection/secrets):\n'+JSON.stringify(window.__flow); window.__flow=null; }
+  else { $('#input').value = 'Analyze this file for vulnerabilities: '+curFile; }
+  send(); }
+
+// ── structure panel ─────────────────────────────────────
+function tab(t){ document.querySelectorAll('[data-tab]').forEach(d=>d.classList.toggle('active', d.dataset.tab===t)); $('#files').style.display = t==='files'?'block':'none'; $('#structwrap').style.display = t==='struct'?'block':'none'; }
+function renderStruct(s){
+  const exp = s.exported_components.map(c=>`<span class="tag">${esc(c.type)}: ${esc((c.name||'').split('.').pop())}</span>`).join('');
+  const dl = s.deeplinks.map(d=>`<span class="tag">${esc(d.scheme)}://${esc(d.host||'')}</span>`).join('');
+  const sec = s.secrets.filter(x=>x.likely_secret).map(x=>`<div><span class="sec">🔑 ${esc(x.name)}</span> = ${esc((x.value||'').slice(0,42))}</div>`).join('');
+  const hosts = (s.endpoints.hosts||[]).slice(0,40).map(h=>`<span class="tag">${esc(h)}</span>`).join('');
+  const paths = (s.endpoints.api_paths||[]).slice(0,60).map(p=>`<div class="muted">${esc(p)}</div>`).join('');
+  $('#struct').innerHTML = `
+    <div><span class="k">package</span> ${esc(s.package||'?')} <span class="muted">v${esc(s.version||'?')}</span></div>
+    <div><span class="k">stack</span> ${s.apk.is_react_native?'React Native + Hermes':s.apk.is_flutter?'Flutter':'Native'} · ${s.apk.dex_count} dex · ${s.apk.native_libs.length} libs</div>
+    <div style="margin-top:8px"><span class="k">exported (${s.exported_components.length})</span><br>${exp||'<span class="muted">none</span>'}</div>
+    <div style="margin-top:8px"><span class="k">deep-links (${s.deeplinks.length})</span><br>${dl||'<span class="muted">none</span>'}</div>
+    <div style="margin-top:8px"><span class="k">secrets</span><br>${sec||'<span class="muted">none flagged</span>'}</div>
+    <div style="margin-top:8px"><span class="k">hosts (${(s.endpoints.hosts||[]).length})</span><br>${hosts||'<span class="muted">none</span>'}</div>
+    <div style="margin-top:8px"><span class="k">api paths</span>${paths||'<span class="muted"> none</span>'}</div>
+    ${s.notes.map(n=>`<div class="muted" style="margin-top:8px">💡 ${esc(n)}</div>`).join('')}`;
+}
+
+// ── chat ────────────────────────────────────────────────
+function connectChat(){
+  chatWS = new WebSocket(`ws://${location.host}/ws/chat`);
+  chatWS.onmessage = ev=>{
+    const m = JSON.parse(ev.data);
+    if(m.type==='text') addAI(m.text);
+    else if(m.type==='tool_call') addTool(m.name, m.args, null);
+    else if(m.type==='tool_result') addToolResult(m.name, m.result);
+    else if(m.type==='error') addAI('⚠️ '+m.error);
+  };
+  chatWS.onclose = ()=> setTimeout(connectChat, 1500);
+}
+function addUser(t){ const d=document.createElement('div'); d.className='msg user'; d.innerHTML=`<div class="bubble">${esc(t)}</div>`; $('#msgs').appendChild(d); scroll(); }
+function addAI(t){ const d=document.createElement('div'); d.className='msg ai'; d.innerHTML=`<div class="bubble">${esc(t)}</div>`; $('#msgs').appendChild(d); scroll(); }
+function addTool(name,args){ const d=document.createElement('details'); d.className='tool'; d.id='tool-'+Math.random().toString(36).slice(2); d.innerHTML=`<summary>🔧 <b>${esc(name)}</b> ${esc(JSON.stringify(args).slice(0,120))}</summary>`; $('#msgs').appendChild(d); scroll(); window.__lastTool=d; }
+function addToolResult(name,result){ const d=window.__lastTool; if(d){ const pre=document.createElement('pre'); pre.textContent=result; d.appendChild(pre);} scroll(); }
+function scroll(){ $('#msgs').scrollTop = $('#msgs').scrollHeight; }
+function send(){
+  const t = $('#input').value.trim(); if(!t) return;
+  if(!chatWS || chatWS.readyState!==1){ addAI('⚠️ chat not connected'); return; }
+  addUser(t); $('#input').value=''; chatWS.send(JSON.stringify({message:t}));
+}
+$('#input').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }});
+
+// ── emulator mirror ─────────────────────────────────────
+let emuTimer=null;
+async function emuShot(){
+  try{
+    const r = await fetch('/api/emulator/screenshot?t='+Date.now());
+    if(!r.ok){ $('#emuimg').style.display='none'; $('#emuph').style.display='block'; return; }
+    const blob = await r.blob(); $('#emuimg').src = URL.createObjectURL(blob); $('#emuimg').style.display='block'; $('#emuph').style.display='none';
+  }catch(e){ $('#emuph').style.display='block'; }
+}
+function emuToggle(){ if(emuTimer){ clearInterval(emuTimer); emuTimer=null; $('#emubtn').textContent='▶ Mirror'; } else { emuShot(); emuTimer=setInterval(emuShot,1500); $('#emubtn').textContent='⏸ Stop'; } }
+
+// ── emulator + network intercept ────────────────────────
+const H={'Content-Type':'application/json'};
+function rtab(t){ document.querySelectorAll('[data-rt]').forEach(d=>d.classList.toggle('active',d.dataset.rt===t)); $('#rt-screen').style.display=t==='screen'?'block':'none'; $('#rt-net').style.display=t==='net'?'block':'none'; }
+async function emuAvds(){ try{ const r=await (await fetch('/api/emulator/avds')).json(); const a=(r.avds&&r.avds.length)?r.avds:['']; $('#avdsel').innerHTML=a.map(x=>`<option value="${esc(x)}">${esc(x||'(no AVDs found)')}</option>`).join(''); }catch(e){} }
+async function emuStart(){ const avd=$('#avdsel').value; if(!avd){ addAI('⚠️ no AVD selected — create one (see PHASE2_SETUP.md)'); return; } await fetch('/api/emulator/start',{method:'POST',headers:H,body:JSON.stringify({avd,headless:$('#emuheadless').checked})}); addAI('📱 booting '+avd+'… mirror appears after boot'); if(!emuTimer) emuToggle(); }
+async function emuStop(){ await fetch('/api/emulator/stop',{method:'POST'}); }
+async function emuInstall(){ const p=prompt('APK path on Kali to install:'); if(!p)return; const r=await (await fetch('/api/emulator/install',{method:'POST',headers:H,body:JSON.stringify({apk_path:p})})).json(); addAI('install → '+(r.out||'').slice(0,200)); }
+async function emuLaunch(){ const p=prompt('package to launch (e.g. com.syfe):'); if(p) await fetch('/api/emulator/launch',{method:'POST',headers:H,body:JSON.stringify({package:p})}); }
+async function emuInput(o){ try{ await fetch('/api/emulator/input',{method:'POST',headers:H,body:JSON.stringify(o)}); }catch(e){} }
+function emuKey(k){ emuInput({kind:'key',key:k}); }
+function emuDeeplink(){ const u=$('#dlink').value.trim(); if(u){ emuInput({kind:'deeplink',uri:u}); addAI('sent deeplink: '+u); } }
+let icWS=null, icOn=false;
+function connectIntercept(){ icWS=new WebSocket(`ws://${location.host}/ws/intercept`); icWS.onmessage=ev=>{ const f=JSON.parse(ev.data); if(f.type==='flow') addFlow(f); }; icWS.onclose=()=>setTimeout(connectIntercept,1500); }
+async function icToggle(){ if(!icOn){ const tgt=$('#ictarget').value; await fetch('/api/intercept/start',{method:'POST',headers:H,body:JSON.stringify({set_device_proxy: tgt==='emulator'})}); icOn=true; $('#icbtn').textContent='⏸ Stop intercept'; addAI(tgt==='emulator'?'🌐 intercept on — emulator proxied (10.0.2.2:8080)':'🌐 intercept on — set Firefox proxy 127.0.0.1:8080 + trust mitmproxy CA (WEB_INTERCEPT.md)'); } else { await fetch('/api/intercept/stop',{method:'POST'}); icOn=false; $('#icbtn').textContent='▶ Start intercept'; } }
+let FLOWS=[];
+function addFlow(f){ FLOWS.push(f); if(FLOWS.length>500) FLOWS.shift(); const d=document.createElement('div'); d.className='node'; d.style.fontSize='12px'; const col=f.status>=400?'var(--err)':'var(--ok)'; d.innerHTML=`<span style="color:${col}">${f.status}</span> <b>${esc(f.method)}</b> ${esc(f.host)}<span class="muted">${esc((f.path||'').slice(0,44))}</span>`; d.onclick=()=>showFlow(f); $('#flows').prepend(d); }
+function clearFlows(){ FLOWS=[]; $('#flows').innerHTML=''; }
+function analyzeFlows(){ if(!FLOWS.length){ addAI('no flows captured yet'); return; } const lines=FLOWS.slice(-50).map(f=>`${f.status} ${f.method} ${f.host}${f.path}`).join('\n'); $('#input').value='These are intercepted HTTP flows from my authorized test. Identify interesting endpoints, auth tokens/cookies, IDOR/BOLA candidates, secrets, and injection points worth testing:\n'+lines; send(); }
+function showFlow(f){ window.__flow=f; curFile=null; $('#vpath').textContent=f.method+' '+f.url;
+  let s='status: '+f.status+'\n\n## request headers\n'+Object.entries(f.req_headers||{}).map(([k,v])=>k+': '+v).join('\n');
+  if(f.query && Object.keys(f.query).length) s+='\n\n## query\n'+JSON.stringify(f.query,null,2);
+  if(f.req_body) s+='\n\n## request body\n'+f.req_body;
+  s+='\n\n## response headers\n'+Object.entries(f.res_headers||{}).map(([k,v])=>k+': '+v).join('\n');
+  if(f.res_body) s+='\n\n## response body\n'+f.res_body;
+  $('#vbody').textContent=s; $('#viewer').classList.add('show'); }
+
+// ── init ────────────────────────────────────────────────
+loadCfg(); connectChat(); connectIntercept(); emuAvds();
+$('#emuimg').onclick = e=>{ const im=$('#emuimg'); if(!im.naturalWidth) return; const r=im.getBoundingClientRect(); emuInput({kind:'tap', x:Math.round((e.clientX-r.left)/r.width*im.naturalWidth), y:Math.round((e.clientY-r.top)/r.height*im.naturalHeight)}); };
+</script>
+</body>
+</html>
