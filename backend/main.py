@@ -13,10 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 import analyzer
+import chatstore
 import config as cfgmod
 import decompiler
 import emulator
-from agent import Agent, test_agentic
+from agent import Agent, quick_comment, test_agentic
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend" / "index.html"
@@ -143,12 +144,14 @@ async def ws_analyze(ws: WebSocket):
 @app.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
-    history: list = []
+    history: list = chatstore.load()
+    await ws.send_json({"type": "history", "messages": chatstore.display(history)})
     try:
         while True:
             req = json.loads(await ws.receive_text())
             if req.get("reset"):
                 history = []
+                chatstore.clear()
                 continue
             msg = req.get("message", "")
             cfg = cfgmod.load()
@@ -162,6 +165,7 @@ async def ws_chat(ws: WebSocket):
                 await ws.send_json({"type": t, **p})
 
             history = await agent.run(msg, history, emit)
+            chatstore.save(history)
     except WebSocketDisconnect:
         pass
     except Exception as e:  # noqa: BLE001
@@ -279,6 +283,29 @@ async def intercept_stop():
     await emulator.clear_proxy()
     MITM["proc"] = None
     return {"running": False}
+
+
+# ── AI comment on an intercepted flow + chat history persistence ────────────────
+@app.post("/api/intercept/analyze")
+async def intercept_analyze(flow: dict = Body(...)):
+    summary = (
+        f"{flow.get('method')} {flow.get('url')} -> {flow.get('status')}\n"
+        f"req_headers: {json.dumps(flow.get('req_headers', {}))[:800]}\n"
+        f"req_body: {(flow.get('req_body') or '')[:800]}\n"
+        f"res_body: {(flow.get('res_body') or '')[:800]}"
+    )
+    return {"comment": await quick_comment(cfgmod.load(), summary)}
+
+
+@app.get("/api/history")
+async def get_history():
+    return {"messages": chatstore.display(chatstore.load())}
+
+
+@app.post("/api/history/clear")
+async def clear_history():
+    chatstore.clear()
+    return {"ok": True}
 
 
 # ── self-update from GitHub (git pull) ──────────────────────────────────────────

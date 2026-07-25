@@ -47,6 +47,21 @@ class Agent:
         return messages
 
 
+async def quick_comment(cfg: dict, text: str) -> str:
+    """One-line AI verdict on an intercepted flow (no tools, cheap)."""
+    try:
+        provider = get_provider(cfg)
+        turn = await provider.complete(
+            "You are a pentest traffic analyst. Reply with ONE terse line (max ~18 words). "
+            "Flag anything security-relevant (auth token, secret/API key, PII, IDOR-style id, "
+            "injection point, cleartext, weak cookie); if nothing notable reply exactly 'ok'.",
+            [{"role": "user", "content": text}], [],
+        )
+        return (turn.text or "").strip()[:200]
+    except Exception:
+        return ""
+
+
 async def test_agentic(cfg: dict) -> dict:
     """Validate that the configured provider can actually call a tool."""
     try:
