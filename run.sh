@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 if [ -d .git ]; then
   echo "[reconforge] updating from GitHub…"
-  git pull --ff-only || echo "[reconforge] git pull skipped (local changes / offline)"
+  git pull --ff-only origin main || echo "[reconforge] git pull skipped (local changes / offline)"
 fi
 
 if [ ! -d .venv ]; then

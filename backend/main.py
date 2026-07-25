@@ -285,7 +285,7 @@ async def intercept_stop():
 @app.post("/api/self-update")
 async def self_update():
     proc = await asyncio.create_subprocess_shell(
-        "git pull --ff-only", cwd=str(ROOT),
+        "git pull --ff-only origin main", cwd=str(ROOT),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
     try:
