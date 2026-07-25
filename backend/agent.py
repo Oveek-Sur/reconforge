@@ -19,6 +19,9 @@ class Agent:
 
     async def run(self, user_msg: str, history: list, emit: Emit) -> list:
         system = self.cfg["settings"]["system_prompt"]
+        scope = self.cfg["settings"].get("scope", "")
+        if "{scope}" in system:
+            system = system.replace("{scope}", scope or "the operator's authorized bug-bounty programs")
         max_steps = int(self.cfg["settings"].get("max_agent_steps", 40))
         messages = list(history) + [{"role": "user", "content": user_msg}]
         for _ in range(max_steps):
