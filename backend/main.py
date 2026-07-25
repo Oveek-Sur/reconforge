@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from fastapi import Body, FastAPI, Header, Query, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, Header, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 
@@ -416,6 +416,28 @@ async def remote_exec(body: dict = Body(...), x_rf_token: str = Header(default="
         return {"rc": 124, "out": f"[timeout after {timeout}s]"}
     except Exception as e:  # noqa: BLE001
         return {"rc": -1, "out": f"[error] {e}"}
+
+
+@app.post("/api/upload")
+async def upload(request: Request, name: str = Query(...), x_rf_token: str = Header(default="")):
+    """Stream a raw file body (e.g. an APK) into the workspace/uploads dir.
+
+    Token-gated like /api/exec. Uses request.stream() so a 200 MB APK never
+    sits in RAM. Upload with:
+      curl -X POST "<host>/api/upload?name=app.apk" -H "X-RF-Token: <tok>" \
+           --data-binary @app.apk
+    """
+    tok = cfgmod.load()["settings"].get("remote_token", "")
+    if not tok or not hmac.compare_digest(str(x_rf_token), str(tok)):
+        return JSONResponse({"error": "bad token"}, 403)
+    dest = cfgmod.workspace_dir() / "uploads" / Path(name).name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    with open(dest, "wb") as f:
+        async for chunk in request.stream():
+            f.write(chunk)
+            size += len(chunk)
+    return {"path": str(dest), "size": size, "name": dest.name}
 
 
 @app.get("/api/selftest")
