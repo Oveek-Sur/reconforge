@@ -219,7 +219,8 @@ async function saveSettings(){
   $('#provlabel').textContent = CFG.active_provider; $('#testres').innerHTML='<span class="muted">saved</span>';
 }
 async function testAgentic(){
-  $('#testres').innerHTML='<span class="muted">testing…</span>';
+  await saveSettings();
+  $('#testres').innerHTML='<span class="muted">saved · testing…</span>';
   const r = await (await fetch('/api/test-agentic',{method:'POST'})).json();
   $('#testres').innerHTML = r.agentic ? '<span class="pill ok">agentic ✓</span>' : '<span class="pill err">failed</span> <span class="muted">'+esc(r.error||JSON.stringify(r.tool_calls||[]))+'</span>';
 }
