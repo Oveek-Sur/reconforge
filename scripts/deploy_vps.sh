@@ -19,11 +19,21 @@ ROOT="$(pwd)"
 echo "== 1. system packages =="
 if command -v apt-get >/dev/null; then
   sudo apt-get update -y
-  sudo apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless python3 python3-venv python3-pip git curl unzip jadx mitmproxy || \
-  sudo apt-get install -y openjdk-17-jre-headless python3 python3-venv python3-pip git curl unzip
+  # core (must succeed): python + a JRE for jadx (default-jre works on any Debian/arch)
+  sudo apt-get install -y python3 python3-venv python3-pip git curl unzip default-jre-headless
+  # jadx: prefer apt; fall back to the official release zip (arch-independent, JVM)
+  if ! sudo apt-get install -y jadx; then
+    echo "-- jadx not in apt; fetching release zip --"
+    JADX_VER=1.5.0
+    curl -sL -o /tmp/jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
+    sudo mkdir -p /opt/jadx && sudo unzip -o -q /tmp/jadx.zip -d /opt/jadx
+    sudo ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx
+  fi
+  # mitmproxy is only for dynamic capture — never fail static setup over it
+  sudo apt-get install -y mitmproxy || pip install -q --break-system-packages mitmproxy || true
 fi
-command -v jadx >/dev/null && echo "jadx: $(command -v jadx)" || echo "!! jadx not in apt — install manually from github.com/skylot/jadx/releases"
+command -v jadx >/dev/null && echo "jadx: $(command -v jadx) ($(jadx --version 2>/dev/null | head -1))" \
+  || echo "!! jadx missing — check network / install manually from github.com/skylot/jadx/releases"
 
 echo "== 2. python venv + deps =="
 [ -d .venv ] || python3 -m venv .venv
