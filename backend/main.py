@@ -19,6 +19,7 @@ import chatstore
 import config as cfgmod
 import decompiler
 import emulator
+import frida as fridamod
 from agent import Agent, quick_comment, test_agentic
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -228,6 +229,44 @@ async def emu_launch(body: dict = Body(...)):
 async def emu_input(body: dict = Body(...)):
     kind = body.pop("kind")
     return {"out": await emulator.input_event(kind, **body)}
+
+
+# ── Frida SSL-unpin + decrypted capture (defeats pinning / system-CA-only apps) ──
+@app.get("/api/frida/versions")
+async def frida_versions():
+    return await fridamod.versions()
+
+
+@app.post("/api/frida/ensure-server")
+async def frida_ensure():
+    return await fridamod.ensure_server()
+
+
+@app.post("/api/frida/capture-start")
+async def frida_capture_start(body: dict = Body(...)):
+    return await fridamod.capture_start(
+        body["package"], int(body.get("port", 8080)), body.get("drive", True)
+    )
+
+
+@app.get("/api/frida/capture-status")
+async def frida_capture_status():
+    return await fridamod.capture_status()
+
+
+@app.post("/api/frida/capture-stop")
+async def frida_capture_stop():
+    return await fridamod.capture_stop()
+
+
+@app.get("/api/frida/flows")
+async def frida_flows(host: str = Query(default="")):
+    return {"flows": await fridamod.flows(host)}
+
+
+@app.get("/api/frida/analyze")
+async def frida_analyze():
+    return {"report": await fridamod.analyze()}
 
 
 # ── network intercept (mitmproxy sidecar → UI) ──────────────────────────────────

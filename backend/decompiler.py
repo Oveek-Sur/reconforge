@@ -40,8 +40,14 @@ def find_jadx() -> str:
 
 
 def _build_cmd(jadx: str, apk_path: str, out_dir: str) -> list[str]:
-    threads = str(max(1, (os.cpu_count() or 4) - 1))
+    # Fewer threads = lower peak RAM (each worker decompiles in parallel). On a
+    # small VPS set RECONFORGE_JADX_THREADS=2 to keep memory down.
+    default_threads = max(1, (os.cpu_count() or 4) - 1)
+    threads = os.environ.get("RECONFORGE_JADX_THREADS", str(default_threads))
     base = [jadx, "-j", threads, "-d", out_dir, apk_path]
+    # Skip debug info to cut memory + time when RECONFORGE_JADX_LEAN=1
+    if os.environ.get("RECONFORGE_JADX_LEAN") == "1":
+        base[1:1] = ["--no-debug-info"]
     # On Windows a .bat must run through cmd.exe
     if jadx.lower().endswith(".bat") and sys.platform == "win32":
         return ["cmd", "/c", *base]
@@ -59,8 +65,10 @@ async def run_jadx(
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     cmd = _build_cmd(jadx, apk_path, out_dir)
 
-    # jadx needs a big heap for large apps; harmless if ignored.
-    env = {**os.environ, "JAVA_TOOL_OPTIONS": os.environ.get("JAVA_TOOL_OPTIONS", "-Xmx6g")}
+    # jadx heap: big for large apps, but capped so it doesn't starve a small VPS.
+    # Tune with RECONFORGE_JADX_XMX (e.g. "2g" on a 4GB VM, "8g" on a big box).
+    xmx = os.environ.get("RECONFORGE_JADX_XMX", "4g")
+    env = {**os.environ, "JAVA_TOOL_OPTIONS": os.environ.get("JAVA_TOOL_OPTIONS", f"-Xmx{xmx}")}
 
     await on_progress(0, f"launching jadx: {Path(apk_path).name}")
     proc = await asyncio.create_subprocess_exec(
